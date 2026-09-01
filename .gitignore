@@ -1,0 +1,16 @@
+# Environnement virtuel Python
+venv/
+
+# Variables sensibles (clé API)
+.env
+
+# Données personnelles
+profil.json
+
+# Fichiers Python compilés
+__pycache__/
+*.pyc
+
+# Fichiers système
+.DS_Store
+Thumbs.db

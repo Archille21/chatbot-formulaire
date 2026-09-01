@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Chatbot Formulaire</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 60px auto;
+            background: #f4f4f9;
+            padding: 20px;
+        }
+        h1 { color: #333; }
+        label {
+            font-weight: bold;
+            color: #444;
+        }
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border-radius: 8px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+            margin-bottom: 15px;
+        }
+        textarea { height: 100px; }
+        button {
+            padding: 12px 24px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        button:hover { background: #45a049; }
+        .resultat {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <h1>🤖 Chatbot Formulaire Universel</h1>
+    <p><a href="/profil">🧠 Gérer mon profil mémorisé</a></p>
+    <p>Colle l'URL d'un formulaire, décris tes infos en une phrase, et le bot le remplit pour toi.</p>
+
+    <form method="POST">
+        <label>URL du formulaire :</label>
+        <input type="text" name="url" value="{{ url_precedente or '' }}"
+               placeholder="https://docs.google.com/forms/...">
+
+        <label>Tes informations :</label>
+        <textarea name="texte" placeholder="Ex: Je m'appelle Paul Martin, mon email est paul@test.com, message: intéressé par vos services">{{ texte_precedent or '' }}</textarea>
+
+        <button type="submit">Remplir le formulaire</button>
+    </form>
+
+    {% if resultat %}
+    <div class="resultat">
+        <strong>✅ Résultat du remplissage :</strong><br>
+        {% for champ, statut in resultat.items() %}
+            {{ champ }} : {{ statut }}<br>
+        {% endfor %}
+    </div>
+    {% endif %}
+</body>
+</html>

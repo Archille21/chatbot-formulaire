@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mon profil</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 60px auto;
+            background: #f4f4f9;
+            padding: 20px;
+        }
+        h1 { color: #333; }
+        .ligne { display: flex; gap: 10px; margin-bottom: 10px; }
+        input {
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+        input[name="cle"] { width: 150px; }
+        input[name="valeur"] { flex: 1; }
+        button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        a { display: inline-block; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>🧠 Mon profil mémorisé</h1>
+    <p>Ces informations seront réutilisées automatiquement dans tes formulaires.</p>
+
+    <form method="POST">
+        {% for cle, valeur in profil.items() %}
+        <div class="ligne">
+            <input type="text" name="cle" value="{{ cle }}">
+            <input type="text" name="valeur" value="{{ valeur }}">
+        </div>
+        {% endfor %}
+        <!-- Une ligne vide pour ajouter une nouvelle info -->
+        <div class="ligne">
+            <input type="text" name="cle" placeholder="ex: adresse">
+            <input type="text" name="valeur" placeholder="ex: 12 rue de la Paix">
+        </div>
+
+        <button type="submit">💾 Sauvegarder</button>
+    </form>
+
+    <a href="/">← Retour au chatbot</a>
+</body>
+</html>
