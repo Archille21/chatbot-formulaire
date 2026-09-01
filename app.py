@@ -58,7 +58,7 @@ Réponds UNIQUEMENT en JSON avec les champs exacts comme clés."""},
 def remplir_formulaire_dynamique(url, donnees):
     resultats_remplissage = {}
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(url)
 
@@ -70,7 +70,8 @@ def remplir_formulaire_dynamique(url, donnees):
                 except Exception:
                     resultats_remplissage[champ] = "⚠️ champ non trouvé"
 
-        page.wait_for_event("close", timeout=0)
+        page.wait_for_timeout(3000)
+        browser.close()
     return resultats_remplissage
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -119,4 +120,5 @@ def profil_page():
     return render_template("profil.html", profil=profil)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
