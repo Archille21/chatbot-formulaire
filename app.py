@@ -30,12 +30,40 @@ client = OpenAI(
 )
 
 
-def detecter_champs(page):
-    """Scanne la page et retourne la liste des labels des champs texte trouvés."""
-    snapshot = page.locator("body").aria_snapshot()
-    champs = re.findall(r'textbox\s+"([^"]+)"', snapshot)
-    return champs
+import requests
+from urllib.parse import urlencode
 
+def obtenir_mapping_champs(url):
+    """Récupère la correspondance {label du champ: entry_id} depuis un Google Form."""
+    reponse = requests.get(url)
+    html = reponse.text
+
+    match = re.search(r'var FB_PUBLIC_LOAD_DATA_ = (.*?);\s*</script>', html, re.DOTALL)
+    if not match:
+        return {}
+
+    data = json.loads(match.group(1))
+    questions = data[1][1]
+
+    mapping = {}
+    for question in questions:
+        titre = question[1]
+        entries = question[4]
+        if entries and entries[0][0]:
+            entry_id = entries[0][0]
+            mapping[titre] = f"entry.{entry_id}"
+    return mapping
+
+
+def construire_lien_prefill(url, donnees, mapping):
+    """Construit l'URL du formulaire avec les réponses déjà pré-remplies."""
+    params = {"usp": "pp_url"}
+    for champ, valeur in donnees.items():
+        if valeur and champ in mapping:
+            params[mapping[champ]] = valeur
+
+    url_propre = url.split("?")[0]  # on retire d'éventuels paramètres existants
+    return f"{url_propre}?{urlencode(params)}"
 
 def extraire_infos_dynamique(texte, champs, profil):
     liste_champs = ", ".join(champs)
@@ -75,33 +103,28 @@ def remplir_formulaire_dynamique(url, donnees):
     return resultats_remplissage
 @app.route("/", methods=["GET", "POST"])
 def index():
-    resultat = None
     texte_precedent = None
     url_precedente = None
+    lien_prefill = None
     profil = charger_profil()
 
     if request.method == "POST":
         texte_precedent = request.form.get("texte", "")
-        url_precedente = request.form.get("url","")
+        url_precedente = request.form.get("url", "")
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
-            page = browser.new_page()
-            page.goto(url_precedente)
-            champs = detecter_champs(page)
-            browser.close()
+        mapping = obtenir_mapping_champs(url_precedente)
+        champs = list(mapping.keys())
 
         donnees = extraire_infos_dynamique(texte_precedent, champs, profil)
-        resultat = remplir_formulaire_dynamique(url_precedente, donnees)
+        lien_prefill = construire_lien_prefill(url_precedente, donnees, mapping)
 
     return render_template(
         "index.html",
-        resultat=resultat,
         texte_precedent=texte_precedent,
         url_precedente=url_precedente,
-        profil=profil
+        profil=profil,
+        lien_prefill=lien_prefill
     )
-
 
 @app.route("/profil", methods=["GET", "POST"])
 def profil_page():
