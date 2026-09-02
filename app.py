@@ -34,7 +34,7 @@ import requests
 from urllib.parse import urlencode
 
 def obtenir_mapping_champs(url):
-    """Récupère la correspondance {label du champ: entry_id} depuis un Google Form."""
+    """Récupère pour chaque champ : son entry_id, son type, et ses options si applicable."""
     reponse = requests.get(url)
     html = reponse.text
 
@@ -45,43 +45,73 @@ def obtenir_mapping_champs(url):
     data = json.loads(match.group(1))
     questions = data[1][1]
 
+    # Types Google Forms : 0=texte court, 1=paragraphe, 2=radio, 3=liste déroulante, 4=cases à cocher
+    types_a_choix = {2, 3, 4}
+
     mapping = {}
     for question in questions:
         titre = question[1]
+        type_champ = question[3]
         entries = question[4]
-        if entries and entries[0][0]:
-            entry_id = entries[0][0]
-            mapping[titre] = f"entry.{entry_id}"
-    return mapping
 
+        if not entries or not entries[0][0]:
+            continue
+
+        entry_id = entries[0][0]
+        info_champ = {
+            "entry": f"entry.{entry_id}",
+            "type": type_champ,
+            "options": []
+        }
+
+        # Si c'est un champ à choix, on récupère la liste des options possibles
+        if type_champ in types_a_choix and len(entries[0]) > 1 and entries[0][1]:
+            info_champ["options"] = [choix[0] for choix in entries[0][1] if choix[0]]
+
+        mapping[titre] = info_champ
+
+    return mapping
 
 def construire_lien_prefill(url, donnees, mapping):
     """Construit l'URL du formulaire avec les réponses déjà pré-remplies."""
     params = {"usp": "pp_url"}
     for champ, valeur in donnees.items():
         if valeur and champ in mapping:
-            params[mapping[champ]] = valeur
+            entry_id = mapping[champ]["entry"]
+            params[entry_id] = valeur
 
-    url_propre = url.split("?")[0]  # on retire d'éventuels paramètres existants
+    url_propre = url.split("?")[0]
     return f"{url_propre}?{urlencode(params)}"
-
-def extraire_infos_dynamique(texte, champs, profil):
-    liste_champs = ", ".join(champs)
+def extraire_infos_dynamique(texte, mapping, profil):
     profil_texte = json.dumps(profil, ensure_ascii=False)
+
+    # On construit une description claire de chaque champ, avec ses options si besoin
+    description_champs = []
+    for titre, info in mapping.items():
+        if info["options"]:
+            options_texte = " / ".join(info["options"])
+            description_champs.append(f'- "{titre}" : choisis EXACTEMENT une option parmi [{options_texte}]')
+        else:
+            description_champs.append(f'- "{titre}" : texte libre')
+
+    description = "\n".join(description_champs)
+
     reponse = client.chat.completions.create(
         model="deepseek-chat",
         messages=[
-            {"role": "system", "content": f"""Tu remplis un formulaire qui a EXACTEMENT ces champs : {liste_champs}.
+            {"role": "system", "content": f"""Tu remplis un formulaire avec les champs suivants :
+{description}
+
 Tu disposes d'un profil mémorisé de l'utilisateur : {profil_texte}.
 Utilise en priorité les informations données dans le texte de l'utilisateur.
 Si une info manque dans le texte mais existe dans le profil mémorisé, utilise le profil.
-Si l'info n'existe ni dans le texte ni dans le profil, mets une chaîne vide ''.
-Réponds UNIQUEMENT en JSON avec les champs exacts comme clés."""},
+Pour les champs à choix, réponds EXACTEMENT avec le texte d'une des options proposées, jamais une valeur inventée.
+Si l'info n'existe nulle part ou ne correspond à aucune option valide, mets une chaîne vide ''.
+Réponds UNIQUEMENT en JSON avec les titres exacts des champs comme clés."""},
             {"role": "user", "content": texte}
         ]
     )
     return json.loads(reponse.choices[0].message.content)
-
 
 def remplir_formulaire_dynamique(url, donnees):
     resultats_remplissage = {}
@@ -115,7 +145,7 @@ def index():
         mapping = obtenir_mapping_champs(url_precedente)
         champs = list(mapping.keys())
 
-        donnees = extraire_infos_dynamique(texte_precedent, champs, profil)
+        donnees = extraire_infos_dynamique(texte_precedent, mapping, profil)
         lien_prefill = construire_lien_prefill(url_precedente, donnees, mapping)
 
     return render_template(
