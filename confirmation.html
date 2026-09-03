@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Confirmation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 100px auto;
+            text-align: center;
+        }
+        .succes { color: #4CAF50; }
+        .echec { color: #e74c3c; }
+        a { display: inline-block; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    {% if succes %}
+        <h1 class="succes">✅ Formulaire envoyé !</h1>
+        <p>Le formulaire a été soumis automatiquement avec succès.</p>
+    {% else %}
+        <h1 class="echec">⚠️ Échec de l'envoi</h1>
+        <p>Le bouton d'envoi n'a pas pu être trouvé ou cliqué automatiquement.</p>
+    {% endif %}
+    <a href="/">← Retour au chatbot</a>
+</body>
+</html>

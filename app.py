@@ -155,6 +155,32 @@ def index():
         profil=profil,
         lien_prefill=lien_prefill
     )
+def soumettre_formulaire_automatiquement(lien_prefill):
+    """Ouvre le lien pré-rempli et clique automatiquement sur Suivant/Envoyer jusqu'à la fin."""
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(lien_prefill)
+
+        # On avance à travers les pages du formulaire (s'il y en a plusieurs)
+        for _ in range(15):  # limite de sécurité pour éviter une boucle infinie
+            bouton_suivant = page.get_by_role("button", name=re.compile("Suivant|Next", re.IGNORECASE))
+            if bouton_suivant.count() > 0:
+                bouton_suivant.first.click()
+                page.wait_for_timeout(1000)
+            else:
+                break
+
+        # On clique sur le bouton final d'envoi
+        bouton_envoyer = page.get_by_role("button", name=re.compile("Envoyer|Submit", re.IGNORECASE))
+        confirmation = False
+        if bouton_envoyer.count() > 0:
+            bouton_envoyer.first.click()
+            page.wait_for_timeout(2000)
+            confirmation = True
+
+        browser.close()
+        return confirmation
 
 @app.route("/profil", methods=["GET", "POST"])
 def profil_page():
@@ -171,6 +197,11 @@ def profil_page():
 
     profil = charger_profil()
     return render_template("profil.html", profil=profil)
+@app.route("/soumettre", methods=["POST"])
+def soumettre():
+    lien = request.form.get("lien_prefill", "")
+    succes = soumettre_formulaire_automatiquement(lien) if lien else False
+    return render_template("confirmation.html", succes=succes)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
