@@ -157,22 +157,25 @@ def index():
     )
 def soumettre_formulaire_automatiquement(lien_prefill):
     """Ouvre le lien pré-rempli et clique automatiquement sur Suivant/Envoyer jusqu'à la fin."""
+    os.makedirs("static", exist_ok=True)
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(lien_prefill, wait_until="networkidle")
+        page.wait_for_timeout(1500)
 
-        for _ in range(15):
-            page.wait_for_timeout(1500)  # laisse le temps au JS de s'afficher
+        page.screenshot(path="static/etape_0_debut.png", full_page=True)
 
+        for i in range(15):
             bouton_suivant = page.get_by_role("button", name=re.compile("Suivant|Next", re.IGNORECASE))
+
             if bouton_suivant.count() > 0:
                 bouton_suivant.first.click()
-                page.wait_for_load_state("networkidle")
+                page.wait_for_timeout(2000)
+                page.screenshot(path=f"static/etape_{i+1}_apres_suivant.png", full_page=True)
             else:
                 break
-
-        page.wait_for_timeout(1500)
 
         bouton_envoyer = page.get_by_role("button", name=re.compile("Envoyer|Submit", re.IGNORECASE))
         confirmation = False
@@ -182,13 +185,10 @@ def soumettre_formulaire_automatiquement(lien_prefill):
             page.wait_for_timeout(2000)
             confirmation = True
         else:
-            # On prend une capture pour comprendre pourquoi le bouton n'a pas été trouvé
-            os.makedirs("static", exist_ok=True)
             page.screenshot(path="static/echec_envoi.png", full_page=True)
 
         browser.close()
-        return confirmation
-@app.route("/profil", methods=["GET", "POST"])
+        return confirmation@app.route("/profil", methods=["GET", "POST"])
 def profil_page():
     if request.method == "POST":
         # On récupère toutes les paires clé/valeur envoyées par le formulaire
@@ -208,6 +208,13 @@ def soumettre():
     lien = request.form.get("lien_prefill", "")
     succes = soumettre_formulaire_automatiquement(lien) if lien else False
     return render_template("confirmation.html", succes=succes)
+@app.route("/debug")
+def debug():
+    fichiers = sorted(os.listdir("static")) if os.path.exists("static") else []
+    html = "<h1>Captures de debug</h1>"
+    for f in fichiers:
+        html += f"<h3>{f}</h3><img src='/static/{f}' style='max-width:600px; border:1px solid #ccc; margin-bottom:20px;'><br>"
+    return html
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
