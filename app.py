@@ -169,8 +169,8 @@ def index():
 
         if not url_precedente.strip():
             erreur = "⚠️ Merci de renseigner l'URL du formulaire."
-        elif not texte_precedent.strip():
-            erreur = "⚠️ Merci de décrire tes informations."
+        elif not texte_precedent.strip() and not profil:
+            erreur = "⚠️ Merci de décrire tes informations, ou de renseigner ton profil mémorisé."
         else:
             mapping = obtenir_mapping_champs(url_precedente)
             if not mapping:
