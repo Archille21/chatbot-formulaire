@@ -19,10 +19,9 @@
     {% if succes %}
         <h1 class="succes">✅ Formulaire envoyé !</h1>
         <p>Le formulaire a été soumis automatiquement avec succès.</p>
-    {% else %}
-        <h1 class="echec">⚠️ Échec de l'envoi</h1>
-        <p>Le bouton d'envoi n'a pas pu être trouvé ou cliqué automatiquement.</p>
-    {% endif %}
-    <a href="/">← Retour au chatbot</a>
-</body>
+   {% else %}
+    <h1 class="echec">⚠️ Échec de l'envoi</h1>
+    <p>Le bouton d'envoi n'a pas pu être trouvé ou cliqué automatiquement.</p>
+    <img src="/static/echec_envoi.png" style="max-width:100%; border:1px solid #ccc; border-radius:8px; margin-top:20px;">
+{% endif %}</body>
 </html>

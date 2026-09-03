@@ -160,28 +160,34 @@ def soumettre_formulaire_automatiquement(lien_prefill):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(lien_prefill)
+        page.goto(lien_prefill, wait_until="networkidle")
 
-        # On avance à travers les pages du formulaire (s'il y en a plusieurs)
-        for _ in range(15):  # limite de sécurité pour éviter une boucle infinie
+        for _ in range(15):
+            page.wait_for_timeout(1500)  # laisse le temps au JS de s'afficher
+
             bouton_suivant = page.get_by_role("button", name=re.compile("Suivant|Next", re.IGNORECASE))
             if bouton_suivant.count() > 0:
                 bouton_suivant.first.click()
-                page.wait_for_timeout(1000)
+                page.wait_for_load_state("networkidle")
             else:
                 break
 
-        # On clique sur le bouton final d'envoi
+        page.wait_for_timeout(1500)
+
         bouton_envoyer = page.get_by_role("button", name=re.compile("Envoyer|Submit", re.IGNORECASE))
         confirmation = False
+
         if bouton_envoyer.count() > 0:
             bouton_envoyer.first.click()
             page.wait_for_timeout(2000)
             confirmation = True
+        else:
+            # On prend une capture pour comprendre pourquoi le bouton n'a pas été trouvé
+            os.makedirs("static", exist_ok=True)
+            page.screenshot(path="static/echec_envoi.png", full_page=True)
 
         browser.close()
         return confirmation
-
 @app.route("/profil", methods=["GET", "POST"])
 def profil_page():
     if request.method == "POST":
@@ -202,7 +208,6 @@ def soumettre():
     lien = request.form.get("lien_prefill", "")
     succes = soumettre_formulaire_automatiquement(lien) if lien else False
     return render_template("confirmation.html", succes=succes)
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
