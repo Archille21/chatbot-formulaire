@@ -143,30 +143,16 @@ def soumettre_formulaire_automatiquement(lien_prefill):
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(lien_prefill, wait_until="networkidle")
-        page.wait_for_timeout(1500)
+        page.wait_for_timeout(2000)
 
         page.screenshot(path="static/etape_0_debut.png", full_page=True)
 
-        for i in range(15):
-            bouton_suivant = page.get_by_role("button", name=re.compile("Suivant|Next", re.IGNORECASE))
+        # 🔍 DIAGNOSTIC : on sauvegarde la structure accessible complète de la page
+        snapshot = page.locator("body").aria_snapshot()
+        with open("static/diagnostic.txt", "w", encoding="utf-8") as f:
+            f.write(snapshot)
 
-            if bouton_suivant.count() > 0:
-                bouton_suivant.first.click()
-                page.wait_for_timeout(2000)
-                page.screenshot(path=f"static/etape_{i+1}_apres_suivant.png", full_page=True)
-            else:
-                break
-
-        bouton_envoyer = page.get_by_role("button", name=re.compile("Envoyer|Submit", re.IGNORECASE))
         confirmation = False
-
-        if bouton_envoyer.count() > 0:
-            bouton_envoyer.first.click()
-            page.wait_for_timeout(2000)
-            confirmation = True
-        else:
-            page.screenshot(path="static/echec_envoi.png", full_page=True)
-
         browser.close()
         return confirmation
 
@@ -226,6 +212,16 @@ def debug():
     for f in fichiers:
         html += f"<h3>{f}</h3><img src='/static/{f}' style='max-width:600px; border:1px solid #ccc; margin-bottom:20px;'><br>"
     return html
+
+
+@app.route("/diagnostic")
+def diagnostic():
+    chemin = "static/diagnostic.txt"
+    if os.path.exists(chemin):
+        with open(chemin, "r", encoding="utf-8") as f:
+            contenu = f.read()
+        return f"<pre>{contenu}</pre>"
+    return "Aucun diagnostic disponible pour l'instant."
 
 
 if __name__ == "__main__":
