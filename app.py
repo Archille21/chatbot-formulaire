@@ -1,25 +1,13 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 from openai import OpenAI
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright
 import os
 import json
 import re
-from flask import Flask, render_template, request, redirect, url_for
+import requests
+from urllib.parse import urlencode
 
-FICHIER_PROFIL = "profil.json"
-
-def charger_profil():
-    """Charge le profil mémorisé, ou un profil vide s'il n'existe pas encore."""
-    if os.path.exists(FICHIER_PROFIL):
-        with open(FICHIER_PROFIL, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
-
-def sauvegarder_profil(donnees):
-    """Sauvegarde le profil mis à jour."""
-    with open(FICHIER_PROFIL, "w", encoding="utf-8") as f:
-        json.dump(donnees, f, ensure_ascii=False, indent=2)
 load_dotenv()
 
 app = Flask(__name__)
@@ -29,9 +17,22 @@ client = OpenAI(
     base_url="https://api.deepseek.com"
 )
 
+FICHIER_PROFIL = "profil.json"
 
-import requests
-from urllib.parse import urlencode
+
+def charger_profil():
+    """Charge le profil mémorisé, ou un profil vide s'il n'existe pas encore."""
+    if os.path.exists(FICHIER_PROFIL):
+        with open(FICHIER_PROFIL, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def sauvegarder_profil(donnees):
+    """Sauvegarde le profil mis à jour."""
+    with open(FICHIER_PROFIL, "w", encoding="utf-8") as f:
+        json.dump(donnees, f, ensure_ascii=False, indent=2)
+
 
 def obtenir_mapping_champs(url):
     """Récupère pour chaque champ : son entry_id, son type, et ses options si applicable."""
@@ -45,7 +46,6 @@ def obtenir_mapping_champs(url):
     data = json.loads(match.group(1))
     questions = data[1][1]
 
-    # Types Google Forms : 0=texte court, 1=paragraphe, 2=radio, 3=liste déroulante, 4=cases à cocher
     types_a_choix = {2, 3, 4}
 
     mapping = {}
@@ -64,13 +64,13 @@ def obtenir_mapping_champs(url):
             "options": []
         }
 
-        # Si c'est un champ à choix, on récupère la liste des options possibles
         if type_champ in types_a_choix and len(entries[0]) > 1 and entries[0][1]:
             info_champ["options"] = [choix[0] for choix in entries[0][1] if choix[0]]
 
         mapping[titre] = info_champ
 
     return mapping
+
 
 def construire_lien_prefill(url, donnees, mapping):
     """Construit l'URL du formulaire avec les réponses déjà pré-remplies."""
@@ -82,10 +82,11 @@ def construire_lien_prefill(url, donnees, mapping):
 
     url_propre = url.split("?")[0]
     return f"{url_propre}?{urlencode(params)}"
+
+
 def extraire_infos_dynamique(texte, mapping, profil):
     profil_texte = json.dumps(profil, ensure_ascii=False)
 
-    # On construit une description claire de chaque champ, avec ses options si besoin
     description_champs = []
     for titre, info in mapping.items():
         if info["options"]:
@@ -113,6 +114,7 @@ Réponds UNIQUEMENT en JSON avec les titres exacts des champs comme clés."""},
     )
     return json.loads(reponse.choices[0].message.content)
 
+
 def remplir_formulaire_dynamique(url, donnees):
     resultats_remplissage = {}
     with sync_playwright() as p:
@@ -131,30 +133,8 @@ def remplir_formulaire_dynamique(url, donnees):
         page.wait_for_timeout(3000)
         browser.close()
     return resultats_remplissage
-@app.route("/", methods=["GET", "POST"])
-def index():
-    texte_precedent = None
-    url_precedente = None
-    lien_prefill = None
-    profil = charger_profil()
 
-    if request.method == "POST":
-        texte_precedent = request.form.get("texte", "")
-        url_precedente = request.form.get("url", "")
 
-        mapping = obtenir_mapping_champs(url_precedente)
-        champs = list(mapping.keys())
-
-        donnees = extraire_infos_dynamique(texte_precedent, mapping, profil)
-        lien_prefill = construire_lien_prefill(url_precedente, donnees, mapping)
-
-    return render_template(
-        "index.html",
-        texte_precedent=texte_precedent,
-        url_precedente=url_precedente,
-        profil=profil,
-        lien_prefill=lien_prefill
-    )
 def soumettre_formulaire_automatiquement(lien_prefill):
     """Ouvre le lien pré-rempli et clique automatiquement sur Suivant/Envoyer jusqu'à la fin."""
     os.makedirs("static", exist_ok=True)
@@ -188,10 +168,37 @@ def soumettre_formulaire_automatiquement(lien_prefill):
             page.screenshot(path="static/echec_envoi.png", full_page=True)
 
         browser.close()
-        return confirmation@app.route("/profil", methods=["GET", "POST"])
+        return confirmation
+
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    texte_precedent = None
+    url_precedente = None
+    lien_prefill = None
+    profil = charger_profil()
+
+    if request.method == "POST":
+        texte_precedent = request.form.get("texte", "")
+        url_precedente = request.form.get("url", "")
+
+        mapping = obtenir_mapping_champs(url_precedente)
+
+        donnees = extraire_infos_dynamique(texte_precedent, mapping, profil)
+        lien_prefill = construire_lien_prefill(url_precedente, donnees, mapping)
+
+    return render_template(
+        "index.html",
+        texte_precedent=texte_precedent,
+        url_precedente=url_precedente,
+        profil=profil,
+        lien_prefill=lien_prefill
+    )
+
+
+@app.route("/profil", methods=["GET", "POST"])
 def profil_page():
     if request.method == "POST":
-        # On récupère toutes les paires clé/valeur envoyées par le formulaire
         nouveau_profil = {}
         cles = request.form.getlist("cle")
         valeurs = request.form.getlist("valeur")
@@ -203,11 +210,15 @@ def profil_page():
 
     profil = charger_profil()
     return render_template("profil.html", profil=profil)
+
+
 @app.route("/soumettre", methods=["POST"])
 def soumettre():
     lien = request.form.get("lien_prefill", "")
     succes = soumettre_formulaire_automatiquement(lien) if lien else False
     return render_template("confirmation.html", succes=succes)
+
+
 @app.route("/debug")
 def debug():
     fichiers = sorted(os.listdir("static")) if os.path.exists("static") else []
@@ -215,6 +226,8 @@ def debug():
     for f in fichiers:
         html += f"<h3>{f}</h3><img src='/static/{f}' style='max-width:600px; border:1px solid #ccc; margin-bottom:20px;'><br>"
     return html
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
