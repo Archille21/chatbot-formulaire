@@ -115,44 +115,42 @@ Réponds UNIQUEMENT en JSON avec les titres exacts des champs comme clés."""},
     return json.loads(reponse.choices[0].message.content)
 
 
-def remplir_formulaire_dynamique(url, donnees):
-    resultats_remplissage = {}
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(url)
-
-        for champ, valeur in donnees.items():
-            if valeur:
-                try:
-                    page.get_by_role("textbox", name=champ).first.fill(valeur)
-                    resultats_remplissage[champ] = "✅ rempli"
-                except Exception:
-                    resultats_remplissage[champ] = "⚠️ champ non trouvé"
-
-        page.wait_for_timeout(3000)
-        browser.close()
-    return resultats_remplissage
-
-
 def soumettre_formulaire_automatiquement(lien_prefill):
-    """Ouvre le lien pré-rempli et clique automatiquement sur Suivant/Envoyer jusqu'à la fin."""
+    """Ouvre le lien pré-rempli (en forçant le français) et clique automatiquement sur Suivant/Envoyer jusqu'à la fin."""
     os.makedirs("static", exist_ok=True)
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(lien_prefill, wait_until="networkidle")
-        page.wait_for_timeout(2000)
+
+        # On force l'affichage en français (hl=fr) pour être sûr des libellés des boutons
+        separateur = "&" if "?" in lien_prefill else "?"
+        lien_avec_langue = f"{lien_prefill}{separateur}hl=fr"
+        page.goto(lien_avec_langue, wait_until="networkidle")
+        page.wait_for_timeout(1500)
 
         page.screenshot(path="static/etape_0_debut.png", full_page=True)
 
-        # 🔍 DIAGNOSTIC : on sauvegarde la structure accessible complète de la page
-        snapshot = page.locator("body").aria_snapshot()
-        with open("static/diagnostic.txt", "w", encoding="utf-8") as f:
-            f.write(snapshot)
+        for i in range(15):
+            bouton_suivant = page.get_by_role("button", name=re.compile("Suivant|Next|Volgende", re.IGNORECASE))
 
+            if bouton_suivant.count() > 0:
+                bouton_suivant.first.click()
+                page.wait_for_timeout(2000)
+                page.screenshot(path=f"static/etape_{i+1}_apres_suivant.png", full_page=True)
+            else:
+                break
+
+        bouton_envoyer = page.get_by_role("button", name=re.compile("Envoyer|Submit|Verzenden", re.IGNORECASE))
         confirmation = False
+
+        if bouton_envoyer.count() > 0:
+            bouton_envoyer.first.click()
+            page.wait_for_timeout(2000)
+            confirmation = True
+        else:
+            page.screenshot(path="static/echec_envoi.png", full_page=True)
+
         browser.close()
         return confirmation
 
@@ -162,23 +160,32 @@ def index():
     texte_precedent = None
     url_precedente = None
     lien_prefill = None
+    erreur = None
     profil = charger_profil()
 
     if request.method == "POST":
         texte_precedent = request.form.get("texte", "")
         url_precedente = request.form.get("url", "")
 
-        mapping = obtenir_mapping_champs(url_precedente)
-
-        donnees = extraire_infos_dynamique(texte_precedent, mapping, profil)
-        lien_prefill = construire_lien_prefill(url_precedente, donnees, mapping)
+        if not url_precedente.strip():
+            erreur = "⚠️ Merci de renseigner l'URL du formulaire."
+        elif not texte_precedent.strip():
+            erreur = "⚠️ Merci de décrire tes informations."
+        else:
+            mapping = obtenir_mapping_champs(url_precedente)
+            if not mapping:
+                erreur = "⚠️ Impossible d'analyser ce formulaire. Vérifie que le lien est correct."
+            else:
+                donnees = extraire_infos_dynamique(texte_precedent, mapping, profil)
+                lien_prefill = construire_lien_prefill(url_precedente, donnees, mapping)
 
     return render_template(
         "index.html",
         texte_precedent=texte_precedent,
         url_precedente=url_precedente,
         profil=profil,
-        lien_prefill=lien_prefill
+        lien_prefill=lien_prefill,
+        erreur=erreur
     )
 
 
@@ -205,15 +212,6 @@ def soumettre():
     return render_template("confirmation.html", succes=succes)
 
 
-@app.route("/debug")
-def debug():
-    fichiers = sorted(os.listdir("static")) if os.path.exists("static") else []
-    html = "<h1>Captures de debug</h1>"
-    for f in fichiers:
-        html += f"<h3>{f}</h3><img src='/static/{f}' style='max-width:600px; border:1px solid #ccc; margin-bottom:20px;'><br>"
-    return html
-
-
 @app.route("/diagnostic")
 def diagnostic():
     chemin = "static/diagnostic.txt"
@@ -222,6 +220,15 @@ def diagnostic():
             contenu = f.read()
         return f"<pre>{contenu}</pre>"
     return "Aucun diagnostic disponible pour l'instant."
+
+
+@app.route("/debug")
+def debug():
+    fichiers = sorted(os.listdir("static")) if os.path.exists("static") else []
+    html = "<h1>Captures de debug</h1>"
+    for f in fichiers:
+        html += f"<h3>{f}</h3><img src='/static/{f}' style='max-width:600px; border:1px solid #ccc; margin-bottom:20px;'><br>"
+    return html
 
 
 if __name__ == "__main__":
